@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  # FalkorDB — graph database
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "${FALKORDB_PORT:-6379}:6379"
+    volumes:
+      - falkordb_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # FastAPI backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - FALKORDB_GRAPH_NAME=${FALKORDB_GRAPH_NAME:-contextops}
+      - BACKEND_DEBUG=${BACKEND_DEBUG:-true}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-http://localhost:3000}
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # React frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  falkordb_data:
